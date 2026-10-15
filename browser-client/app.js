@@ -1,43 +1,43 @@
 const config = window.PASTEBIN_CONFIG;
- 
+
 const loginCard = document.getElementById('loginCard');
 
 const appCard = document.getElementById('appCard');
- 
+
 const usernameInput = document.getElementById('username');
 
 const passwordInput = document.getElementById('password');
- 
+
 const loginBtn = document.getElementById('loginBtn');
 
 const logoutBtn = document.getElementById('logoutBtn');
- 
+
 const statusText = document.getElementById('statusText');
 
 const statusDot = document.getElementById('statusDot');
- 
+
 const reconnectBtn = document.getElementById('reconnectBtn');
- 
+
 const pasteText = document.getElementById('pasteText');
- 
+
 const sendBtn = document.getElementById('sendBtn');
 
 const copyBtn = document.getElementById('copyBtn');
- 
+
 const loginError = document.getElementById('loginError');
 
 const messageInfo = document.getElementById('messageInfo');
- 
+
 let socket;
 
 let manualClose = false;
- 
+
 function setStatus(text, type = '') {
 
   statusText.textContent = text;
 
   statusDot.className = 'dot';
- 
+
   if (type) {
 
     statusDot.classList.add(type);
@@ -45,23 +45,23 @@ function setStatus(text, type = '') {
   }
 
 }
- 
+
 function getAccessToken() {
 
   return localStorage.getItem('accessToken');
 
 }
- 
+
 function getRefreshToken() {
 
   return localStorage.getItem('refreshToken');
 
 }
- 
+
 function saveTokens(accessToken, refreshToken) {
 
   localStorage.setItem('accessToken', accessToken);
- 
+
   if (refreshToken) {
 
     localStorage.setItem('refreshToken', refreshToken);
@@ -69,11 +69,11 @@ function saveTokens(accessToken, refreshToken) {
   }
 
 }
- 
+
 async function login() {
 
   loginError.textContent = '';
- 
+
   try {
 
     const response = await fetch(
@@ -101,7 +101,7 @@ async function login() {
       }
 
     );
- 
+
     if (!response.ok) {
 
       loginError.textContent = 'Login failed';
@@ -109,9 +109,9 @@ async function login() {
       return;
 
     }
- 
+
     const data = await response.json();
- 
+
     saveTokens(
 
       data.accessToken,
@@ -119,11 +119,11 @@ async function login() {
       data.refreshToken
 
     );
- 
+
     showApp();
 
     connectWebSocket();
- 
+
   } catch (error) {
 
     console.error(error);
@@ -133,17 +133,17 @@ async function login() {
   }
 
 }
- 
+
 async function refreshAccessToken() {
 
   const refreshToken = getRefreshToken();
- 
+
   if (!refreshToken) {
 
     return false;
 
   }
- 
+
   try {
 
     const response = await fetch(
@@ -169,15 +169,15 @@ async function refreshAccessToken() {
       }
 
     );
- 
+
     if (!response.ok) {
 
       return false;
 
     }
- 
+
     const data = await response.json();
- 
+
     localStorage.setItem(
 
       'accessToken',
@@ -185,9 +185,9 @@ async function refreshAccessToken() {
       data.accessToken
 
     );
- 
+
     return true;
- 
+
   } catch (error) {
 
     console.error(error);
@@ -197,11 +197,11 @@ async function refreshAccessToken() {
   }
 
 }
- 
+
 function connectWebSocket() {
 
   const token = getAccessToken();
- 
+
   if (!token) {
 
     showLogin();
@@ -209,7 +209,7 @@ function connectWebSocket() {
     return;
 
   }
- 
+
   if (socket) {
 
     manualClose = true;
@@ -217,23 +217,23 @@ function connectWebSocket() {
     socket.close();
 
   }
- 
+
   manualClose = false;
- 
+
   setStatus('Connecting...');
- 
+
   socket = new WebSocket(
 
     `${config.WS_URL}?token=${encodeURIComponent(token)}`
 
   );
- 
+
   socket.onopen = () => {
 
     setStatus('Connected', 'connected');
 
   };
- 
+
   socket.onmessage = (event) => {
 
     pasteText.value = event.data;
@@ -241,25 +241,25 @@ function connectWebSocket() {
     messageInfo.textContent = 'Text received';
 
   };
- 
+
   socket.onerror = () => {
 
     setStatus('Connection error', 'error');
 
   };
- 
+
   socket.onclose = async () => {
 
     setStatus('Disconnected', 'error');
- 
+
     if (manualClose) {
 
       return;
 
     }
- 
+
     const refreshed = await refreshAccessToken();
- 
+
     if (refreshed) {
 
       connectWebSocket();
@@ -275,7 +275,7 @@ function connectWebSocket() {
   };
 
 }
- 
+
 function sendText() {
 
   if (
@@ -291,55 +291,42 @@ function sendText() {
     return;
 
   }
- 
+
   socket.send(pasteText.value);
 
 }
- 
+
 async function logout() {
-
+  
   const refreshToken = getRefreshToken();
- 
+
   if (refreshToken) {
-
     try {
-
-      await fetch(
-
+      const response = await fetch(
         `${config.AUTH_API_URL}/users/refresh`,
-
         {
-
           method: 'DELETE',
-
           headers: {
-
             Authorization: `Bearer ${refreshToken}`
-
           }
-
         }
-
       );
 
+      console.log('Logout status:', response.status);
     } catch (error) {
-
-      console.error(error);
-
+      console.error('Logout failed:', error);
     }
-
   }
- 
-  await clearSession();
 
+  await clearSession();
 }
- 
+
 async function clearSession() {
 
   localStorage.removeItem('accessToken');
 
   localStorage.removeItem('refreshToken');
- 
+
   if (socket) {
 
     manualClose = true;
@@ -349,11 +336,11 @@ async function clearSession() {
     socket = null;
 
   }
- 
+
   showLogin();
 
 }
- 
+
 function showApp() {
 
   loginCard.classList.add('hidden');
@@ -361,7 +348,7 @@ function showApp() {
   appCard.classList.remove('hidden');
 
 }
- 
+
 function showLogin() {
 
   appCard.classList.add('hidden');
@@ -369,7 +356,7 @@ function showLogin() {
   loginCard.classList.remove('hidden');
 
 }
- 
+
 loginBtn.addEventListener(
 
   'click',
@@ -377,7 +364,7 @@ loginBtn.addEventListener(
   login
 
 );
- 
+
 logoutBtn.addEventListener(
 
   'click',
@@ -385,7 +372,7 @@ logoutBtn.addEventListener(
   logout
 
 );
- 
+
 reconnectBtn.addEventListener(
 
   'click',
@@ -393,7 +380,7 @@ reconnectBtn.addEventListener(
   connectWebSocket
 
 );
- 
+
 sendBtn.addEventListener(
 
   'click',
@@ -401,7 +388,7 @@ sendBtn.addEventListener(
   sendText
 
 );
- 
+
 copyBtn.addEventListener(
 
   'click',
@@ -413,13 +400,13 @@ copyBtn.addEventListener(
       pasteText.value
 
     );
- 
+
     messageInfo.textContent = 'Copied';
 
   }
 
 );
- 
+
 if (
 
   getAccessToken() &&
@@ -433,4 +420,3 @@ if (
   connectWebSocket();
 
 }
- 
