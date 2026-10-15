@@ -19,7 +19,7 @@ const statusDot = document.getElementById('statusDot');
 const reconnectBtn = document.getElementById('reconnectBtn');
  
 const pasteText = document.getElementById('pasteText');
-
+ 
 const sendBtn = document.getElementById('sendBtn');
 
 const copyBtn = document.getElementById('copyBtn');
@@ -29,6 +29,8 @@ const loginError = document.getElementById('loginError');
 const messageInfo = document.getElementById('messageInfo');
  
 let socket;
+
+let manualClose = false;
  
 function setStatus(text, type = '') {
 
@@ -56,65 +58,143 @@ function getRefreshToken() {
 
 }
  
+function saveTokens(accessToken, refreshToken) {
+
+  localStorage.setItem('accessToken', accessToken);
+ 
+  if (refreshToken) {
+
+    localStorage.setItem('refreshToken', refreshToken);
+
+  }
+
+}
+ 
 async function login() {
 
   loginError.textContent = '';
  
-  const response = await fetch(
+  try {
 
-    `${config.AUTH_API_URL}/users/login`,
+    const response = await fetch(
 
-    {
+      `${config.AUTH_API_URL}/users/login`,
 
-      method: 'POST',
+      {
 
-      headers: {
+        method: 'POST',
 
-        'Content-Type': 'application/json'
+        headers: {
 
-      },
+          'Content-Type': 'application/json'
 
-      body: JSON.stringify({
+        },
 
-        username: usernameInput.value,
+        body: JSON.stringify({
 
-        password: passwordInput.value
+          username: usernameInput.value,
 
-      })
+          password: passwordInput.value
+
+        })
+
+      }
+
+    );
+ 
+    if (!response.ok) {
+
+      loginError.textContent = 'Login failed';
+
+      return;
 
     }
-
-  );
  
-  if (!response.ok) {
+    const data = await response.json();
+ 
+    saveTokens(
 
-    loginError.textContent = 'Login failed';
+      data.accessToken,
 
-    return;
+      data.refreshToken
+
+    );
+ 
+    showApp();
+
+    connectWebSocket();
+ 
+  } catch (error) {
+
+    console.error(error);
+
+    loginError.textContent = 'Could not connect to server';
+
+  }
+
+}
+ 
+async function refreshAccessToken() {
+
+  const refreshToken = getRefreshToken();
+ 
+  if (!refreshToken) {
+
+    return false;
 
   }
  
-  const data = await response.json();
+  try {
+
+    const response = await fetch(
+
+      `${config.AUTH_API_URL}/users/refresh`,
+
+      {
+
+        method: 'POST',
+
+        headers: {
+
+          'Content-Type': 'application/json'
+
+        },
+
+        body: JSON.stringify({
+
+          refreshToken
+
+        })
+
+      }
+
+    );
  
-  localStorage.setItem(
+    if (!response.ok) {
 
-    'accessToken',
+      return false;
 
-    data.accessToken
-
-  );
+    }
  
-  localStorage.setItem(
-
-    'refreshToken',
-
-    data.refreshToken
-
-  );
+    const data = await response.json();
  
-  showApp();
+    localStorage.setItem(
+
+      'accessToken',
+
+      data.accessToken
+
+    );
  
-  connectWebSocket();
+    return true;
+ 
+  } catch (error) {
+
+    console.error(error);
+
+    return false;
+
+  }
 
 }
  
@@ -132,9 +212,13 @@ function connectWebSocket() {
  
   if (socket) {
 
+    manualClose = true;
+
     socket.close();
 
   }
+ 
+  manualClose = false;
  
   setStatus('Connecting...');
  
@@ -158,15 +242,35 @@ function connectWebSocket() {
 
   };
  
-  socket.onclose = () => {
-
-    setStatus('Disconnected', 'error');
-
-  };
- 
   socket.onerror = () => {
 
     setStatus('Connection error', 'error');
+
+  };
+ 
+  socket.onclose = async () => {
+
+    setStatus('Disconnected', 'error');
+ 
+    if (manualClose) {
+
+      return;
+
+    }
+ 
+    const refreshed = await refreshAccessToken();
+ 
+    if (refreshed) {
+
+      connectWebSocket();
+
+    } else {
+
+      await clearSession();
+
+      loginError.textContent = 'Session expired. Please log in again.';
+
+    }
 
   };
 
@@ -194,13 +298,55 @@ function sendText() {
  
 async function logout() {
 
+  const refreshToken = getRefreshToken();
+ 
+  if (refreshToken) {
+
+    try {
+
+      await fetch(
+
+        `${config.AUTH_API_URL}/users/refresh`,
+
+        {
+
+          method: 'DELETE',
+
+          headers: {
+
+            Authorization: `Bearer ${refreshToken}`
+
+          }
+
+        }
+
+      );
+
+    } catch (error) {
+
+      console.error(error);
+
+    }
+
+  }
+ 
+  await clearSession();
+
+}
+ 
+async function clearSession() {
+
   localStorage.removeItem('accessToken');
 
   localStorage.removeItem('refreshToken');
  
   if (socket) {
 
+    manualClose = true;
+
     socket.close();
+
+    socket = null;
 
   }
  
@@ -224,9 +370,21 @@ function showLogin() {
 
 }
  
-loginBtn.addEventListener('click', login);
+loginBtn.addEventListener(
+
+  'click',
+
+  login
+
+);
  
-logoutBtn.addEventListener('click', logout);
+logoutBtn.addEventListener(
+
+  'click',
+
+  logout
+
+);
  
 reconnectBtn.addEventListener(
 
